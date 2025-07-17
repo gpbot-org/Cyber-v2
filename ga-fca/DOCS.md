@@ -67,7 +67,7 @@ var credentials = {
 }
 ```
 ```bash
-FB_EMAIL="grandpa@example.com"
+FB_EMAIL="priyansh@example.com"
 FB_PASSWORD="MySuperHardP@ssw0rd"
 nodejs login.js
 ```
