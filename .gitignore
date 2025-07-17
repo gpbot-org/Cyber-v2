@@ -16,6 +16,12 @@ yarn-error.log*
 # misc
 *.log
 
+#logs
+logs/*.log
+logs/*/*.log
+logs/**/*.log
+logs/*
+
 # editor config
 .idea/
 .vscode/
