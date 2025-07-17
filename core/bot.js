@@ -25,12 +25,17 @@ class GABot {
 
         // Setup global objects for MiraiV2 compatibility
         this.setupGlobals();
+
+        // Enhanced GA-FCA integration
+        this.gaFcaMethodsLoaded = false;
+        this.enhancedAPI = null;
         
         // Bot state
         this.isReady = false;
         this.commands = new Map();
         this.events = new Map();
         this.cooldowns = new Map();
+        this.sessionValid = true; // Track session validity
         
         // Statistics
         this.stats = {
@@ -157,6 +162,21 @@ class GABot {
                 
                 this.api = api;
                 this.setupApiOptions();
+                
+                // Validate session by testing getCurrentUserID
+                try {
+                    const userID = api.getCurrentUserID();
+                    if (userID) {
+                        this.sessionValid = true;
+                        this.logger.info(`Session valid for user: ${userID}`);
+                    } else {
+                        this.sessionValid = false;
+                        this.logger.warn('Session may be invalid - no user ID');
+                    }
+                } catch (error) {
+                    this.sessionValid = false;
+                    this.logger.warn('Session validation failed:', error.message);
+                }
                 this.setupMessageListener();
                 
                 this.logger.info(this.lang.t('system.loginSuccess'));
@@ -184,6 +204,73 @@ class GABot {
             selfListen: this.config.facebook.selfListen,
             userAgent: this.config.facebook.userAgent
         });
+
+        // Create enhanced API wrapper with better error handling
+        this.enhancedAPI = this.translator.createEnhancedAPI(this.api);
+        this.gaFcaMethodsLoaded = true;
+
+        this.logger.info('Enhanced GA-FCA API wrapper initialized');
+
+        // Load all GA-FCA methods dynamically
+        this.loadGAFCAMethods();
+    }
+
+    // Load all GA-FCA methods from the translator
+    loadGAFCAMethods() {
+        if (!this.translator.gaFcaMethods) {
+            this.logger.warn('GA-FCA methods not loaded in translator');
+            return;
+        }
+
+        let loadedCount = 0;
+        let errorCount = 0;
+
+        for (const [methodName, methodInfo] of this.translator.gaFcaMethods) {
+            try {
+                // Check if method exists in API
+                if (typeof this.api[methodName] === 'function') {
+                    // Wrap method with enhanced error handling if not already wrapped
+                    if (!this.enhancedAPI[methodName]) {
+                        const originalMethod = this.api[methodName];
+
+                        this.enhancedAPI[methodName] = async (...args) => {
+                            try {
+                                return await new Promise((resolve, reject) => {
+                                    const callback = (err, result) => {
+                                        if (err) {
+                                            // Use translator's error handlers
+                                            const handler = this.translator.errorHandlers[methodName] ||
+                                                           this.translator.errorHandlers.generic;
+                                            const handled = handler(err, methodName, args);
+
+                                            this.logger.debug(`GA-FCA ${methodName} error: ${handled.error}`);
+                                            reject(new Error(handled.error));
+                                        } else {
+                                            resolve(result);
+                                        }
+                                    };
+
+                                    originalMethod.apply(this.api, [...args, callback]);
+                                });
+                            } catch (error) {
+                                this.logger.error(`GA-FCA ${methodName} wrapper error:`, error);
+                                throw error;
+                            }
+                        };
+                    }
+
+                    loadedCount++;
+                    this.logger.debug(`Enhanced GA-FCA method: ${methodName}`);
+                } else {
+                    this.logger.debug(`GA-FCA method not found in API: ${methodName}`);
+                }
+            } catch (error) {
+                errorCount++;
+                this.logger.error(`Failed to enhance GA-FCA method ${methodName}:`, error.message);
+            }
+        }
+
+        this.logger.info(`Enhanced ${loadedCount} GA-FCA methods (${errorCount} errors)`);
     }
     
     setupMessageListener() {
@@ -249,12 +336,12 @@ class GABot {
     }
     
     async loadEvents() {
-        const eventsPath = path.join(__dirname, '..', 'modules', 'events');
+        const eventsPath = path.join(__dirname, '..', 'src', 'events');
 
         // Create events directory if it doesn't exist
         if (!fs.existsSync(eventsPath)) {
             fs.mkdirSync(eventsPath, { recursive: true });
-            this.logger.info('Created modules/events directory');
+            this.logger.info('Created src/events directory');
         }
 
         const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
@@ -367,11 +454,33 @@ class GABot {
 
     // === GA-FCA API METHODS ===
 
-    // Message Methods
+    // Message Methods with Enhanced Error Handling
     sendMessage(message, threadID, messageID = null) {
         return new Promise((resolve, reject) => {
-            this.api.sendMessage(message, threadID, (err, info) => {
-                if (err) return reject(err);
+            // Use enhanced API if available
+            const apiToUse = this.enhancedAPI || this.api;
+
+            apiToUse.sendMessage(message, threadID, (err, info) => {
+                if (err) {
+                    // Enhanced error handling for send message
+                    if (err.code === 1545012) {
+                        this.logger.warn(`Not part of conversation ${threadID}`);
+                        return reject(new Error('Not part of conversation'));
+                    } else if (err.message && err.message.includes('rate limit')) {
+                        this.logger.warn(`Rate limited for thread ${threadID}`);
+                        return reject(new Error('Rate limited, please wait'));
+                    } else if (err.message && err.message.includes('blocked')) {
+                        this.logger.warn(`Blocked from sending to thread ${threadID}`);
+                        return reject(new Error('Blocked from sending messages'));
+                    }
+
+                    // Log critical send errors
+                    if (errorRecovery.isCriticalError(err)) {
+                        errorRecovery.logCriticalError(err, `Bot.sendMessage to thread ${threadID}`);
+                    }
+
+                    return reject(err);
+                }
                 resolve(info);
             }, messageID);
         });
@@ -406,9 +515,31 @@ class GABot {
 
     unsendMessage(messageID) {
         return new Promise((resolve, reject) => {
-            this.api.unsendMessage(messageID, (err) => {
-                if (err) return reject(err);
-                resolve();
+            // Use enhanced API if available
+            const apiToUse = this.enhancedAPI || this.api;
+
+            apiToUse.unsendMessage(messageID, (err) => {
+                if (err) {
+                    // Enhanced error handling for unsend
+                    if (err.message && err.message.includes('Message not found')) {
+                        this.logger.warn(`Message ${messageID} already unsent or not found`);
+                        return resolve({ success: false, reason: 'already_unsent' });
+                    } else if (err.message && err.message.includes('permission')) {
+                        this.logger.warn(`No permission to unsend message ${messageID}`);
+                        return resolve({ success: false, reason: 'no_permission' });
+                    } else if (err.code === 1545012) {
+                        this.logger.warn(`Message ${messageID} not found (code 1545012)`);
+                        return resolve({ success: false, reason: 'not_found' });
+                    }
+
+                    // Log critical unsend errors
+                    if (errorRecovery.isCriticalError(err)) {
+                        errorRecovery.logCriticalError(err, `Bot.unsendMessage for message ${messageID}`);
+                    }
+
+                    return reject(err);
+                }
+                resolve({ success: true });
             });
         });
     }
@@ -1041,6 +1172,64 @@ class GABot {
     
     getUptime() {
         return Math.floor((Date.now() - this.startTime) / 1000);
+    }
+
+    // Get enhanced API statistics
+    getEnhancedAPIStats() {
+        if (!this.translator) {
+            return { error: 'Translator not initialized' };
+        }
+
+        const translatorStats = this.translator.getCacheStats();
+        const apiMethodCache = this.translator.apiMethodCache || new Map();
+
+        // Get recent API method usage
+        const recentMethods = Array.from(apiMethodCache.values())
+            .filter(entry => Date.now() - entry.timestamp < 300000) // Last 5 minutes
+            .reduce((acc, entry) => {
+                acc[entry.method] = (acc[entry.method] || 0) + 1;
+                return acc;
+            }, {});
+
+        return {
+            translator: translatorStats,
+            gaFcaMethodsLoaded: this.gaFcaMethodsLoaded,
+            enhancedAPIActive: !!this.enhancedAPI,
+            recentMethodUsage: recentMethods,
+            apiMethodCacheSize: apiMethodCache.size,
+            sessionValid: this.sessionValid
+        };
+    }
+
+    // Test enhanced API functionality
+    async testEnhancedAPI() {
+        if (!this.enhancedAPI) {
+            return { success: false, error: 'Enhanced API not initialized' };
+        }
+
+        const tests = [];
+
+        try {
+            // Test getCurrentUserID
+            const userID = this.api.getCurrentUserID();
+            tests.push({ method: 'getCurrentUserID', success: !!userID, result: userID });
+        } catch (error) {
+            tests.push({ method: 'getCurrentUserID', success: false, error: error.message });
+        }
+
+        try {
+            // Test session validation
+            const sessionTest = this.sessionValid;
+            tests.push({ method: 'sessionValidation', success: sessionTest, result: sessionTest });
+        } catch (error) {
+            tests.push({ method: 'sessionValidation', success: false, error: error.message });
+        }
+
+        return {
+            success: tests.every(test => test.success),
+            tests,
+            timestamp: Date.now()
+        };
     }
     
     setupErrorHandlers() {

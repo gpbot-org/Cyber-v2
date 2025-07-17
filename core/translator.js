@@ -12,6 +12,93 @@ class AdvancedCommandTranslator {
         this.shortcuts = this.createShortcuts();
         this.autoImports = this.createAutoImports();
         this.gaFcaShortcuts = this.createGAFCAShortcuts();
+        this.gaFcaMethods = this.loadGAFCAMethods();
+        this.apiMethodCache = new Map();
+        this.errorHandlers = this.createErrorHandlers();
+    }
+
+    // Load all GA-FCA methods from src directory
+    loadGAFCAMethods() {
+        const gaFcaSrcPath = path.join(__dirname, '..', 'ga-fca', 'src');
+        const methods = new Map();
+
+        if (!fs.existsSync(gaFcaSrcPath)) {
+            this.bot.logger.warn('GA-FCA src directory not found');
+            return methods;
+        }
+
+        const methodFiles = fs.readdirSync(gaFcaSrcPath).filter(file => file.endsWith('.js'));
+
+        for (const file of methodFiles) {
+            try {
+                const methodName = path.basename(file, '.js');
+                const methodPath = path.join(gaFcaSrcPath, file);
+
+                // Store method info for dynamic loading
+                methods.set(methodName, {
+                    path: methodPath,
+                    name: methodName,
+                    loaded: false,
+                    error: null
+                });
+
+                this.bot.logger.debug(`Registered GA-FCA method: ${methodName}`);
+            } catch (error) {
+                this.bot.logger.error(`Failed to register GA-FCA method ${file}:`, error.message);
+            }
+        }
+
+        this.bot.logger.info(`Registered ${methods.size} GA-FCA methods`);
+        return methods;
+    }
+
+    // Create comprehensive error handlers for GA-FCA methods
+    createErrorHandlers() {
+        return {
+            // Handle unsend message errors
+            unsendMessage: (error, messageID) => {
+                if (error.message.includes('Message not found') || error.code === 1545012) {
+                    return { success: false, error: 'Message already unsent or not found', code: 'NOT_FOUND' };
+                }
+                if (error.message.includes('permission') || error.message.includes('not authorized')) {
+                    return { success: false, error: 'No permission to unsend message', code: 'NO_PERMISSION' };
+                }
+                return { success: false, error: error.message, code: 'UNKNOWN' };
+            },
+
+            // Handle send message errors
+            sendMessage: (error, threadID) => {
+                if (error.code === 1545012) {
+                    return { success: false, error: 'Not part of conversation', code: 'NOT_MEMBER' };
+                }
+                if (error.message.includes('rate limit')) {
+                    return { success: false, error: 'Rate limited, please wait', code: 'RATE_LIMIT' };
+                }
+                return { success: false, error: error.message, code: 'UNKNOWN' };
+            },
+
+            // Handle user info errors
+            getUserInfo: (error, userID) => {
+                if (error.message.includes('User not found')) {
+                    return { success: false, error: 'User not found', code: 'USER_NOT_FOUND' };
+                }
+                return { success: false, error: error.message, code: 'UNKNOWN' };
+            },
+
+            // Handle thread info errors
+            getThreadInfo: (error, threadID) => {
+                if (error.message.includes('Thread not found')) {
+                    return { success: false, error: 'Thread not found', code: 'THREAD_NOT_FOUND' };
+                }
+                return { success: false, error: error.message, code: 'UNKNOWN' };
+            },
+
+            // Generic error handler
+            generic: (error, method, params) => {
+                this.bot.logger.error(`GA-FCA ${method} error:`, error);
+                return { success: false, error: error.message, code: 'UNKNOWN', method, params };
+            }
+        };
     }
 
     // Create ultra-minimal shortcuts for all GA-FCA functions
@@ -188,6 +275,70 @@ class AdvancedCommandTranslator {
         };
     }
 
+    // Create enhanced GA-FCA API wrapper with error handling
+    createEnhancedAPI(originalAPI) {
+        const enhancedAPI = { ...originalAPI };
+
+        // Wrap critical methods with enhanced error handling
+        const criticalMethods = [
+            'sendMessage', 'unsendMessage', 'editMessage', 'deleteMessage',
+            'getUserInfo', 'getThreadInfo', 'setMessageReaction',
+            'addUserToGroup', 'removeUserFromGroup', 'changeAdminStatus'
+        ];
+
+        for (const methodName of criticalMethods) {
+            if (typeof originalAPI[methodName] === 'function') {
+                const originalMethod = originalAPI[methodName];
+
+                enhancedAPI[methodName] = async (...args) => {
+                    try {
+                        // Add method to cache for monitoring
+                        const cacheKey = `${methodName}_${Date.now()}`;
+                        this.apiMethodCache.set(cacheKey, {
+                            method: methodName,
+                            args: args.slice(0, -1), // Exclude callback
+                            timestamp: Date.now()
+                        });
+
+                        // Clean old cache entries (keep last 100)
+                        if (this.apiMethodCache.size > 100) {
+                            const entries = Array.from(this.apiMethodCache.entries());
+                            entries.slice(0, entries.length - 100).forEach(([key]) => {
+                                this.apiMethodCache.delete(key);
+                            });
+                        }
+
+                        return await new Promise((resolve, reject) => {
+                            const callback = (err, result) => {
+                                if (err) {
+                                    const handler = this.errorHandlers[methodName] || this.errorHandlers.generic;
+                                    const handled = handler(err, methodName, args);
+
+                                    // Log critical errors
+                                    if (errorRecovery.isCriticalError(err)) {
+                                        errorRecovery.logCriticalError(err, `Enhanced API ${methodName}`);
+                                    }
+
+                                    reject(new Error(handled.error));
+                                } else {
+                                    resolve(result);
+                                }
+                            };
+
+                            originalMethod.apply(originalAPI, [...args, callback]);
+                        });
+                    } catch (error) {
+                        const handler = this.errorHandlers[methodName] || this.errorHandlers.generic;
+                        const handled = handler(error, methodName, args);
+                        throw new Error(handled.error);
+                    }
+                };
+            }
+        }
+
+        return enhancedAPI;
+    }
+
     // Load and translate cmd-v2 commands
     async loadV2Commands() {
         // Load from multiple directories
@@ -295,14 +446,127 @@ class AdvancedCommandTranslator {
                     // Ultra-short messaging
                     $: (msg, tid = event.threadID, mid = event.messageID) => api.sendMessage(msg, tid, mid),
                     reply: (msg) => api.sendMessage(msg, event.threadID, event.messageID),
-                    react: (emoji, mid = event.messageID) => api.setMessageReaction(emoji, mid),
+                    react: (emoji, mid = event.messageID) => {
+                        // Map common emojis to Facebook-compatible reactions
+                        const emojiMap = {
+                            '😍': '😍',
+                            '❤️': '❤️', 
+                            '😢': '😢',
+                            '😂': '😂',
+                            '😮': '😮',
+                            '😠': '😠',
+                            '👍': '👍',
+                            '👎': '👎',
+                            '🏓': '😍', // Fallback for ping emoji
+                            '⚙️': '😍', // Fallback for settings emoji  
+                            '⚡': '😍', // Fallback for lightning emoji
+                            '✅': '👍', // Fallback for checkmark
+                            '❌': '👎'  // Fallback for X
+                        };
+                        
+                        const validEmoji = emojiMap[emoji] || '👍'; // Default fallback
+                        
+                        return new Promise((resolve, reject) => {
+                            api.setMessageReaction(validEmoji, mid, (err) => {
+                                if (err) {
+                                    console.warn(`Reaction failed for ${emoji}, trying fallback...`);
+                                    // Try with thumbs up as last resort
+                                    api.setMessageReaction('👍', mid, (err2) => {
+                                        if (err2) return reject(err2);
+                                        resolve();
+                                    });
+                                } else {
+                                    resolve();
+                                }
+                            });
+                        });
+                    },
                     send: (msg, tid, mid) => api.sendMessage(msg, tid, mid),
                     edit: (msg, mid) => api.editMessage(msg, mid),
-                    unsend: (mid = event.messageID) => api.unsendMessage(mid),
+                    unsend: async (mid = event.messageID) => {
+                        try {
+                            return await api.unsendMessage(mid);
+                        } catch (error) {
+                            const handled = this.errorHandlers.unsendMessage(error, mid);
+                            if (handled.code === 'NOT_FOUND') {
+                                console.warn(`Message ${mid} already unsent or not found`);
+                                return { success: false, reason: 'already_unsent' };
+                            } else if (handled.code === 'NO_PERMISSION') {
+                                console.warn(`No permission to unsend message ${mid}`);
+                                return { success: false, reason: 'no_permission' };
+                            }
+                            throw new Error(handled.error);
+                        }
+                    },
                     delete: (mid = event.messageID) => api.deleteMessage(mid),
                     forward: (mid, tid) => api.forwardAttachment(mid, tid),
-                    typing: (tid = event.threadID, state = true) => api.sendTypingIndicator(tid, state),
-                    typingV2: (tid = event.threadID, state = true) => api.sendTypingIndicatorV2(tid, state),
+                    typing: (tid = event.threadID, state = true) => {
+                        return new Promise((resolve) => {
+                            try {
+                                // Check if session is valid before attempting typing indicator
+                                if (this.bot.sessionValid === false) {
+                                    console.warn('Session invalid, skipping typing indicator');
+                                    return resolve();
+                                }
+                                
+                                api.sendTypingIndicator(tid, (err) => {
+                                    if (err) {
+                                        console.warn('Typing indicator failed:', err.message);
+                                        
+                                        // Mark session as invalid if we get 404 
+                                        if (err.statusCode === 404) {
+                                            this.bot.sessionValid = false;
+                                        }
+                                    }
+                                    resolve(); // Always resolve to not break command
+                                });
+                            } catch (error) {
+                                console.warn('Typing indicator error:', error.message);
+                                resolve(); // Don't fail the command for typing indicator
+                            }
+                        });
+                    },
+                    typingV2: (tid = event.threadID, state = true) => {
+                        return new Promise((resolve) => {
+                            try {
+                                // Check if session is valid before attempting typing indicator
+                                if (this.bot.sessionValid === false) {
+                                    console.warn('Session invalid, skipping typing indicator V2');
+                                    return resolve();
+                                }
+                                
+                                if (api.sendTypingIndicatorV2) {
+                                    api.sendTypingIndicatorV2(tid, state, (err) => {
+                                        if (err) {
+                                            console.warn('Typing indicator V2 failed:', err.message);
+                                            
+                                            // Mark session as invalid if we get 404 
+                                            if (err.statusCode === 404) {
+                                                this.bot.sessionValid = false;
+                                            }
+                                        }
+                                        resolve(); // Always resolve to not break command
+                                    });
+                                } else {
+                                    // Fallback to regular typing indicator
+                                    api.sendTypingIndicator(tid, (err) => {
+                                        if (err) {
+                                            console.warn('Typing indicator fallback failed:', err.message);
+                                            
+                                            // Mark session as invalid if we get 404 
+                                            if (err.statusCode === 404) {
+                                                this.bot.sessionValid = false;
+                                            }
+                                        }
+                                        resolve(); // Always resolve to not break command
+                                    });
+                                }
+                            } catch (error) {
+                                console.warn('Typing indicator V2 error:', error.message);
+                                resolve(); // Don't fail the command for typing indicator
+                            }
+                        });
+                    },
 
                     // Reply message support
                     replyMsg: event.messageReply,
@@ -445,7 +709,21 @@ class AdvancedCommandTranslator {
                     m: {
                         get: (mid) => api.getMessage(mid),
                         react: (emoji, mid = event.messageID) => api.setMessageReaction(emoji, mid),
-                        unsend: (mid = event.messageID) => api.unsendMessage(mid),
+                        unsend: async (mid = event.messageID) => {
+                            try {
+                                return await api.unsendMessage(mid);
+                            } catch (error) {
+                                const handled = this.errorHandlers.unsendMessage(error, mid);
+                                if (handled.code === 'NOT_FOUND') {
+                                    console.warn(`Message ${mid} already unsent or not found`);
+                                    return { success: false, reason: 'already_unsent' };
+                                } else if (handled.code === 'NO_PERMISSION') {
+                                    console.warn(`No permission to unsend message ${mid}`);
+                                    return { success: false, reason: 'no_permission' };
+                                }
+                                throw new Error(handled.error);
+                            }
+                        },
                         delete: (mid = event.messageID) => api.deleteMessage(mid),
                         edit: (msg, mid) => api.editMessage(msg, mid),
                         forward: (mid, tid) => api.forwardAttachment(mid, tid),
@@ -570,7 +848,35 @@ class AdvancedCommandTranslator {
                         color: (name) => api.threadColors?.[name] || name,
                         
                         // Resolve utilities
-                        resolve: (url) => api.resolvePhotoUrl(url)
+                        resolve: (url) => api.resolvePhotoUrl(url),
+                        
+                        // Cache utilities
+                        cache: {
+                            store: new Map(),
+                            get: function(key) {
+                                return this.store.get(key);
+                            },
+                            set: function(key, value, ttl = 0) {
+                                this.store.set(key, value);
+                                if (ttl > 0) {
+                                    setTimeout(() => {
+                                        this.store.delete(key);
+                                    }, ttl);
+                                }
+                            },
+                            has: function(key) {
+                                return this.store.has(key);
+                            },
+                            delete: function(key) {
+                                return this.store.delete(key);
+                            },
+                            clear: function() {
+                                this.store.clear();
+                            },
+                            size: function() {
+                                return this.store.size;
+                            }
+                        }
                     },
                     
                     // Ultra-minimal bot (single letter)
@@ -666,6 +972,9 @@ class AdvancedCommandTranslator {
                     axios: require('axios'),
                     util: require('util'),
                     crypto: require('crypto'),
+                    
+                    // Bot context
+                    bot: this.bot,
                     
                     // Utility functions
                     utils: global.utils || {},

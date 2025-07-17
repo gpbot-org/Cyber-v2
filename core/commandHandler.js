@@ -6,18 +6,40 @@ class CommandHandler {
         this.aliases = new Map();
     }
 
-    // Load all commands from modules directory
+    // Load all commands from src directory structure
     loadCommands() {
         const fs = require('fs');
         const path = require('path');
 
-        const commandsPath = path.join(__dirname, '..', 'modules', 'commands');
+        // Load old syntax commands from src/commands
+        const oldCommandsPath = path.join(__dirname, '..', 'src', 'commands');
+        
+        // Load CMD-V2 commands from src/cmd-v2
+        const cmdV2Path = path.join(__dirname, '..', 'src', 'cmd-v2');
 
-        // Create commands directory if it doesn't exist
-        if (!fs.existsSync(commandsPath)) {
-            fs.mkdirSync(commandsPath, { recursive: true });
+        // Create directories if they don't exist
+        if (!fs.existsSync(oldCommandsPath)) {
+            fs.mkdirSync(oldCommandsPath, { recursive: true });
+        }
+        
+        if (!fs.existsSync(cmdV2Path)) {
+            fs.mkdirSync(cmdV2Path, { recursive: true });
         }
 
+        // Load old syntax commands
+        this.loadOldSyntaxCommands(oldCommandsPath);
+        
+        // Load CMD-V2 commands
+        this.loadCmdV2Commands(cmdV2Path);
+    }
+    
+    // Load old syntax commands
+    loadOldSyntaxCommands(commandsPath) {
+        const fs = require('fs');
+        const path = require('path');
+        
+        if (!fs.existsSync(commandsPath)) return;
+        
         const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
         for (const file of commandFiles) {
@@ -55,13 +77,67 @@ class CommandHandler {
                     }
                 }
 
-                this.bot.logger.debug(`Loaded command: ${command.config.name} v${command.config.version || '1.0.0'}`);
+                this.bot.logger.debug(`Loaded old syntax command: ${command.config.name} v${command.config.version || '1.0.0'}`);
             } catch (error) {
-                this.bot.logger.error(`Failed to load command ${file}:`, error.message);
+                this.bot.logger.error(`Failed to load old syntax command ${file}:`, error.message);
             }
         }
+    }
+    
+    // Load CMD-V2 commands with enhanced features
+    loadCmdV2Commands(cmdV2Path) {
+        const fs = require('fs');
+        const path = require('path');
+        
+        if (!fs.existsSync(cmdV2Path)) return;
+        
+        const commandFiles = fs.readdirSync(cmdV2Path).filter(file => file.endsWith('.js'));
+        
+        for (const file of commandFiles) {
+            try {
+                // Clear require cache for hot reload
+                delete require.cache[require.resolve(path.join(cmdV2Path, file))];
 
-        this.bot.logger.info(`Loaded ${this.commands.size} commands`);
+                const command = require(path.join(cmdV2Path, file));
+
+                // Validate CMD-V2 command structure
+                if (!command.config || !command.config.name || !command.run) {
+                    this.bot.logger.warn(`Invalid CMD-V2 command structure in ${file}. Missing config or run function.`);
+                    continue;
+                }
+
+                // Load dependencies
+                if (command.config.dependencies) {
+                    global.nodemodule = global.nodemodule || {};
+                    for (const dep of Object.keys(command.config.dependencies)) {
+                        try {
+                            global.nodemodule[dep] = require(dep);
+                        } catch (error) {
+                            this.bot.logger.warn(`Failed to load dependency ${dep} for CMD-V2 command ${command.config.name}`);
+                        }
+                    }
+                }
+
+                // Translate CMD-V2 command to compatible format
+                const translatedCommand = this.bot.translator.translateCommand(command);
+
+                // Register command
+                this.commands.set(translatedCommand.config.name, translatedCommand);
+
+                // Register aliases if any
+                if (translatedCommand.config.aliases) {
+                    for (const alias of translatedCommand.config.aliases) {
+                        this.aliases.set(alias, translatedCommand.config.name);
+                    }
+                }
+
+                this.bot.logger.debug(`Loaded CMD-V2 command: ${translatedCommand.config.name} v${translatedCommand.config.version || '1.0.0'}`);
+            } catch (error) {
+                this.bot.logger.error(`Failed to load CMD-V2 command ${file}:`, error.message);
+            }
+        }
+        
+        this.bot.logger.info(`Loaded ${this.commands.size} total commands (old syntax + CMD-V2)`);
     }
 
     // Handle incoming message and execute command if found

@@ -249,6 +249,25 @@ class ErrorRecovery {
                errorMessage.includes('Network error');
     }
 
+    // Log error with context
+    logError(error, context = 'Unknown') {
+        const errorMessage = error.message || error.toString() || JSON.stringify(error);
+        
+        console.log(`🚨 Critical error logged: ${errorMessage}`);
+        
+        if (this.bot && this.bot.logger) {
+            this.bot.logger.error(`[${context}] ${errorMessage}`, error);
+        }
+        
+        // Store error for analysis
+        this.errorStore.set(Date.now(), {
+            error: errorMessage,
+            context: context,
+            timestamp: new Date().toISOString(),
+            stack: error.stack
+        });
+    }
+    
     // Handle different types of errors
     async handleError(error, context = 'Unknown') {
         const errorMessage = error.message || error.toString() || JSON.stringify(error);
