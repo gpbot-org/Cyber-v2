@@ -1,0 +1,114 @@
+{
+  "system": {
+    "botStarted": "✅ Cyber-v2 Bot successfully start hoye gese!",
+    "botStopped": "❌ Bot bondho hoye gese",
+    "loginSuccess": "✅ Login successful hoye gese",
+    "loginFailed": "❌ Login fail hoye gese: %1",
+    "commandNotFound": "❌ Command paoa jay nai: %1",
+    "noPermission": "❌ Apnar ei command use korar permission nai",
+    "adminOnly": "❌ Ei command shudhu admin der jonno",
+    "cooldown": "⏰ Doya kore %1 second wait koren command use korar age",
+    "error": "❌ Ekta error hoye gese: %1",
+    "loading": "⏳ Loading hocche...",
+    "success": "✅ Success!",
+    "failed": "❌ Fail hoye gese!"
+  },
+  
+  "commands": {
+    "help": {
+      "description": "Help information dekhao",
+      "usage": "{prefix}help [command]",
+      "title": "📚 Help Menu",
+      "commandList": "Available commands gula:",
+      "commandInfo": "Command: {command}\nDescription: {description}\nUsage: {usage}",
+      "noCommand": "Command '{command}' paoa jay nai"
+    },
+    
+    "ping": {
+      "description": "Bot er response time check koro",
+      "usage": "{prefix}ping",
+      "response": "🏓 Pong! Response time: {time}ms"
+    },
+    
+    "admin": {
+      "description": "Admin management commands",
+      "usage": "{prefix}admin [add|remove|list] [userID]",
+      "added": "✅ {name} ke admin banano hoye gese",
+      "removed": "✅ {name} ke admin theke remove kora hoye gese",
+      "list": "👑 Admin list:\n{list}",
+      "alreadyAdmin": "❌ User already admin ase",
+      "notAdmin": "❌ User admin na",
+      "invalidUser": "❌ Invalid user ID"
+    },
+    
+    "ban": {
+      "description": "User/thread ban/unban koro",
+      "usage": "{prefix}ban [user|thread] [add|remove] [ID]",
+      "userBanned": "✅ {name} ke ban kora hoye gese",
+      "userUnbanned": "✅ {name} ke unban kora hoye gese",
+      "threadBanned": "✅ {name} thread ke ban kora hoye gese",
+      "threadUnbanned": "✅ {name} thread ke unban kora hoye gese",
+      "alreadyBanned": "❌ Already ban kora ase",
+      "notBanned": "❌ Ban kora nai"
+    },
+    
+    "restart": {
+      "description": "Bot restart koro",
+      "usage": "{prefix}restart",
+      "restarting": "🔄 Bot restart hocche..."
+    },
+    
+    "info": {
+      "description": "Bot er information dekhao",
+      "usage": "{prefix}info",
+      "title": "🤖 Bot Information",
+      "name": "Naam: {name}",
+      "owner": "Owner: {owner}",
+      "prefix": "Prefix: {prefix}",
+      "uptime": "Uptime: {uptime}",
+      "commands": "Commands: {count}",
+      "users": "Users: {count}",
+      "threads": "Threads: {count}"
+    }
+  },
+  
+  "events": {
+    "welcome": {
+      "title": "👋 Khosh Amdeed!",
+      "message": "{name} ke {threadName} e khosh amdeed!\n\n{prefix}help type koren available commands dekhte.",
+      "memberCount": "Members: {count}"
+    },
+    
+    "goodbye": {
+      "title": "👋 Bidai!",
+      "message": "{name} ke bidai! Amra tomake miss korbo.",
+      "memberCount": "Members: {count}"
+    },
+    
+    "antiUnsend": {
+      "title": "📝 Unsent Message",
+      "message": "{name} ekta message unsend korse:\n{content}",
+      "attachment": "📎 Attachment: {type}"
+    }
+  },
+  
+  "security": {
+    "spam": {
+      "warning": "⚠️ {name}, spam koro na please!",
+      "muted": "🔇 {name} ke spam korar jonno mute kora hoye gese",
+      "banned": "🚫 {name} ke spam korar jonno ban kora hoye gese"
+    },
+    
+    "raid": {
+      "detected": "🚨 Raid detect hoye gese! Auto-protection on kora hoye gese.",
+      "blocked": "🛡️ {name} er suspicious join block kora hoye gese"
+    }
+  },
+  
+  "database": {
+    "userNotFound": "❌ User database e paoa jay nai",
+    "threadNotFound": "❌ Thread database e paoa jay nai",
+    "dataCorrupted": "❌ Database corrupt hoye gese, reset kora hocche...",
+    "backupCreated": "✅ Database backup create kora hoye gese"
+  }
+}

@@ -1,0 +1,22 @@
+node_modules/
+build/
+.qodo/
+.vscode/
+.zencoder/
+
+# account cookies
+appstate.json
+cookies.json
+cookies.txt
+
+# nodejs cache files
+npm-debug.log*
+yarn-error.log*
+
+# misc
+*.log
+
+# editor config
+.idea/
+.vscode/
+.editorconfig

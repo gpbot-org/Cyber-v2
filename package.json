@@ -1,0 +1,40 @@
+{
+  "name": "Cyber-v2",
+  "version": "1.0.0",
+  "description": "Facebook Chat Bot by Grandpa Academy with MiraiV2-inspired structure",
+  "main": "main.js",
+  "scripts": {
+    "start": "node run.js start",
+    "dev": "node main.js",
+    "stop": "node run.js stop",
+    "restart": "node run.js restart",
+    "status": "node run.js status",
+    "login": "node get_appstate.js"
+  },
+  "keywords": [
+    "facebook",
+    "messenger",
+    "bot",
+    "chatbot",
+    "ga",
+    "grandpa-academy"
+  ],
+  "author": "Grandpa Academy <GA>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "fs-extra": "^11.3.0",
+    "ga-fca": "^3.0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/grandpaEJ/Cyber-v2"
+  },
+  "bugs": {
+    "url": "https://github.com/grandpaEJ/Cyber-v2/issues"
+  },
+  "homepage": "https://github.com/grandpaEJ/Cyber-v2#readme"
+}

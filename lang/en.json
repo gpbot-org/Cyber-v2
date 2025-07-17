@@ -1,0 +1,114 @@
+{
+  "system": {
+    "botStarted": "✅ Cyber-v2 Bot started successfully!",
+    "botStopped": "❌ Bot stopped",
+    "loginSuccess": "✅ Login successful",
+    "loginFailed": "❌ Login failed: %1",
+    "commandNotFound": "❌ Command not found: %1",
+    "noPermission": "❌ You don't have permission to use this command",
+    "adminOnly": "❌ This command is for admins only",
+    "cooldown": "⏰ Please wait %1 seconds before using this command again",
+    "error": "❌ An error occurred: %1",
+    "loading": "⏳ Loading...",
+    "success": "✅ Success!",
+    "failed": "❌ Failed!"
+  },
+  
+  "commands": {
+    "help": {
+      "description": "Show help information",
+      "usage": "{prefix}help [command]",
+      "title": "📚 Help Menu",
+      "commandList": "Available commands:",
+      "commandInfo": "Command: {command}\nDescription: {description}\nUsage: {usage}",
+      "noCommand": "Command '{command}' not found"
+    },
+    
+    "ping": {
+      "description": "Check bot response time",
+      "usage": "{prefix}ping",
+      "response": "🏓 Pong! Response time: {time}ms"
+    },
+    
+    "admin": {
+      "description": "Admin management commands",
+      "usage": "{prefix}admin [add|remove|list] [userID]",
+      "added": "✅ Added {name} as admin",
+      "removed": "✅ Removed {name} from admin",
+      "list": "👑 Admin list:\n{list}",
+      "alreadyAdmin": "❌ User is already an admin",
+      "notAdmin": "❌ User is not an admin",
+      "invalidUser": "❌ Invalid user ID"
+    },
+    
+    "ban": {
+      "description": "Ban/unban users",
+      "usage": "{prefix}ban [user|thread] [add|remove] [ID]",
+      "userBanned": "✅ Banned user {name}",
+      "userUnbanned": "✅ Unbanned user {name}",
+      "threadBanned": "✅ Banned thread {name}",
+      "threadUnbanned": "✅ Unbanned thread {name}",
+      "alreadyBanned": "❌ Already banned",
+      "notBanned": "❌ Not banned"
+    },
+    
+    "restart": {
+      "description": "Restart the bot",
+      "usage": "{prefix}restart",
+      "restarting": "🔄 Restarting bot..."
+    },
+    
+    "info": {
+      "description": "Show bot information",
+      "usage": "{prefix}info",
+      "title": "🤖 Bot Information",
+      "name": "Name: {name}",
+      "owner": "Owner: {owner}",
+      "prefix": "Prefix: {prefix}",
+      "uptime": "Uptime: {uptime}",
+      "commands": "Commands: {count}",
+      "users": "Users: {count}",
+      "threads": "Threads: {count}"
+    }
+  },
+  
+  "events": {
+    "welcome": {
+      "title": "👋 Welcome!",
+      "message": "Welcome {name} to {threadName}!\n\nType {prefix}help to see available commands.",
+      "memberCount": "Members: {count}"
+    },
+    
+    "goodbye": {
+      "title": "👋 Goodbye!",
+      "message": "Goodbye {name}! We'll miss you.",
+      "memberCount": "Members: {count}"
+    },
+    
+    "antiUnsend": {
+      "title": "📝 Unsent Message",
+      "message": "{name} unsent a message:\n{content}",
+      "attachment": "📎 Attachment: {type}"
+    }
+  },
+  
+  "security": {
+    "spam": {
+      "warning": "⚠️ {name}, please don't spam!",
+      "muted": "🔇 {name} has been muted for spamming",
+      "banned": "🚫 {name} has been banned for spamming"
+    },
+    
+    "raid": {
+      "detected": "🚨 Raid detected! Auto-protection activated.",
+      "blocked": "🛡️ Blocked suspicious join from {name}"
+    }
+  },
+  
+  "database": {
+    "userNotFound": "❌ User not found in database",
+    "threadNotFound": "❌ Thread not found in database",
+    "dataCorrupted": "❌ Database corrupted, resetting...",
+    "backupCreated": "✅ Database backup created"
+  }
+}
